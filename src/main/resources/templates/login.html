@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="center-box">
+
+    <button onclick="loginWithGoogle()">
+        Continue with Google
+    </button>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    const supabaseUrl =
+        "https://mkrzkjrqjekpxbrksakj.supabase.co";
+
+    const supabaseKey =
+        "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
+
+    const supabaseClient =
+        supabase.createClient(
+            supabaseUrl,
+            supabaseKey
+        );
+
+    async function loginWithGoogle() {
+
+        await supabaseClient.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo:
+                    "http://localhost:8080/dashboard"
+            }
+        });
+
+    }
+</script>
+</body>
+</html>

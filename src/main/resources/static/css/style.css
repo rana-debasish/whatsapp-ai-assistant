@@ -1,0 +1,36 @@
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#0f172a;
+    color:white;
+}
+
+nav{
+    background: #242424;
+    padding:20px;
+}
+
+.hero{
+    text-align:center;
+    padding:100px 20px;
+}
+
+.card{
+    background:#1e293b;
+    margin:20px;
+    padding:20px;
+    border-radius:12px;
+}
+
+button{
+    padding:10px 20px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+}
+
+.center-box{
+    width:300px;
+    margin:100px auto;
+    text-align:center;
+}

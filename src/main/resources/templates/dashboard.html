@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<h1>Dashboard</h1>
+
+<h3 id="userEmail">Loading...</h3>
+
+<button onclick="logout()">Logout</button>
+
+<div class="card">
+    <h2>Connected Apps</h2>
+</div>
+
+<div class="card">
+    <h3>WhatsApp</h3>
+
+    <div id="whatsappStatus">
+        Loading...
+    </div>
+</div>
+
+<div class="card">
+    <h3>Google Calendar</h3>
+
+    <div id="googlecalendarStatus">
+        Loading...
+    </div>
+</div>
+
+<div class="card">
+    <h3>Gmail</h3>
+
+    <div id="gmailStatus">
+        Loading...
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+
+    const supabaseUrl =
+        "https://mkrzkjrqjekpxbrksakj.supabase.co";
+
+    const supabaseKey =
+        "sb_publishable_oyvlHEnKthlHOU9xew1aXQ_L5baMKON";
+
+    const supabaseClient =
+        supabase.createClient(
+            supabaseUrl,
+            supabaseKey
+        );
+
+    let currentUser = null;
+    let whatsappStatusTimer = null;
+    let pendingConnectionCode = null;
+
+    async function loadUser() {
+
+        try {
+
+            const {
+                data: { user },
+                error
+            } = await supabaseClient.auth.getUser();
+
+            if(error){
+                console.error(error);
+                return;
+            }
+
+            if(!user){
+                window.location.href="/login";
+                return;
+            }
+
+            currentUser = user;
+
+            document.getElementById("userEmail")
+                .innerText =
+                "Welcome, " + user.email;
+
+            await supabaseClient
+                .from("app_users")
+                .upsert({
+                    email: user.email,
+                    name: user.user_metadata.full_name
+                });
+
+            await loadWhatsappStatus();
+            await loadComposioStatuses();
+            startWhatsappStatusPolling();
+
+        } catch(e){
+
+            console.error(e);
+
+        }
+    }
+
+    function renderWhatsappConnected(connection) {
+
+        pendingConnectionCode = null;
+
+        document.getElementById("whatsappStatus").innerHTML =
+            `
+            <p><b>WhatsApp Connected &#9989;</b></p>
+            <p>Connected phone number: ${connection.phone_number}</p>
+
+            <button onclick="disconnectWhatsapp()">
+                Disconnect
+            </button>
+            `;
+    }
+
+    function renderWhatsappDisconnected() {
+
+        pendingConnectionCode = null;
+
+        document.getElementById("whatsappStatus").innerHTML =
+            `
+            <p>
+                Connect your WhatsApp account to use the AI assistant.
+            </p>
+
+            <button onclick="connectWhatsapp()">
+                Connect
+            </button>
+
+            <p id="linkCode"></p>
+            `;
+    }
+
+    function renderWhatsappPending(code) {
+
+        pendingConnectionCode = code;
+
+        document.getElementById("whatsappStatus").innerHTML =
+            `
+            <h4>Connect Your WhatsApp Account</h4>
+
+            <p>Step 1: Click the button below to open WhatsApp.</p>
+            <p>Step 2: Send the generated code exactly as shown.</p>
+            <p>Step 3: Wait for confirmation from the bot.</p>
+
+            <p>
+                <b>Connection Code:</b>
+                <span>${code}</span>
+            </p>
+
+            <a target="_blank"
+               href="https://wa.me/15551459691?text=${encodeURIComponent(code)}">
+                <button>
+                    Open WhatsApp
+                </button>
+            </a>
+
+            <button onclick="connectWhatsapp()">
+                Generate New Code
+            </button>
+
+            <p id="linkCode">
+                Waiting for WhatsApp confirmation...
+            </p>
+            `;
+    }
+
+    async function loadWhatsappStatus() {
+
+        if(!currentUser){
+            return;
+        }
+
+        const { data, error } =
+            await supabaseClient
+                .from("whatsapp_connections")
+                .select("phone_number,is_connected")
+                .eq("email", currentUser.email)
+                .eq("is_connected", true)
+                .order("id", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+        if(error){
+            console.error(error);
+            renderWhatsappDisconnected();
+            return;
+        }
+
+        if(data && data.is_connected){
+            renderWhatsappConnected(data);
+            return;
+        }
+
+        if(pendingConnectionCode){
+            renderWhatsappPending(pendingConnectionCode);
+            return;
+        }
+
+        renderWhatsappDisconnected();
+    }
+
+    function startWhatsappStatusPolling() {
+
+        if(whatsappStatusTimer){
+            return;
+        }
+
+        whatsappStatusTimer =
+            setInterval(loadWhatsappStatus, 3000);
+    }
+
+    async function logout() {
+
+        if(whatsappStatusTimer){
+            clearInterval(whatsappStatusTimer);
+        }
+
+        await supabaseClient.auth.signOut();
+
+        window.location.href = "/login";
+    }
+
+    async function connectWhatsapp() {
+
+        if(!currentUser){
+            return;
+        }
+
+        const code =
+            "WA-" +
+            Math.random()
+                .toString(36)
+                .substring(2, 8)
+                .toUpperCase();
+
+        document.getElementById("whatsappStatus").innerHTML =
+            "Generating WhatsApp connection code...";
+
+        const { error } =
+            await supabaseClient
+                .from("whatsapp_connections")
+                .insert({
+                    email: currentUser.email,
+                    link_code: code,
+                    is_connected: false
+                });
+
+        if(error){
+            console.error(error);
+            alert("Failed to generate code");
+            renderWhatsappDisconnected();
+            return;
+        }
+
+        renderWhatsappPending(code);
+        startWhatsappStatusPolling();
+    }
+
+    async function disconnectWhatsapp() {
+
+        if(!currentUser){
+            return;
+        }
+
+        pendingConnectionCode = null;
+
+        const { error } =
+            await supabaseClient
+                .from("whatsapp_connections")
+                .update({
+                    is_connected: false,
+                    phone_number: null
+                })
+                .eq("email", currentUser.email)
+                .eq("is_connected", true);
+
+        if(error){
+            console.error(error);
+            alert("Failed to disconnect WhatsApp");
+            return;
+        }
+
+        renderWhatsappDisconnected();
+    }
+
+    async function loadComposioStatuses() {
+
+        await loadComposioStatus("googlecalendar");
+        await loadComposioStatus("gmail");
+    }
+
+    async function loadComposioStatus(toolkit) {
+
+        if(!currentUser){
+            return;
+        }
+
+        const statusElement =
+            document.getElementById(toolkit + "Status");
+
+        try {
+
+            const response =
+                await fetch(
+                    `/api/composio/${toolkit}/status?email=${encodeURIComponent(currentUser.email)}`
+                );
+
+            const result = await response.json();
+
+            if(result.connected){
+                statusElement.innerHTML =
+                    `
+                    <p><b>${getComposioName(toolkit)} Connected &#9989;</b></p>
+
+                    <button onclick="disconnectComposio('${toolkit}')">
+                        Disconnect
+                    </button>
+                    `;
+                return;
+            }
+
+            statusElement.innerHTML =
+                `
+                <p>
+                    Connect ${getComposioName(toolkit)}
+                    to use it from WhatsApp.
+                </p>
+
+                <button onclick="connectComposio('${toolkit}')">
+                    Connect
+                </button>
+                `;
+
+        } catch(e) {
+
+            console.error(e);
+
+            statusElement.innerHTML =
+                `
+                <p>Unable to load ${getComposioName(toolkit)} status.</p>
+
+                <button onclick="loadComposioStatus('${toolkit}')">
+                    Retry
+                </button>
+                `;
+        }
+    }
+
+    async function connectComposio(toolkit) {
+
+        if(!currentUser){
+            return;
+        }
+
+        const statusElement =
+            document.getElementById(toolkit + "Status");
+
+        statusElement.innerText =
+            "Starting " + getComposioName(toolkit) + " connection...";
+
+        try {
+
+            const response =
+                await fetch(
+                    `/api/composio/${toolkit}/connect?email=${encodeURIComponent(currentUser.email)}`,
+                    { method: "POST" }
+                );
+
+            const result = await response.json();
+
+            if(!result.success){
+                alert(result.message || "Unable to start connection");
+                await loadComposioStatus(toolkit);
+                return;
+            }
+
+            window.location.href = result.redirectUrl;
+
+        } catch(e) {
+
+            console.error(e);
+            alert("Unable to start connection");
+            await loadComposioStatus(toolkit);
+        }
+    }
+
+    async function disconnectComposio(toolkit) {
+
+        if(!currentUser){
+            return;
+        }
+
+        try {
+
+            await fetch(
+                `/api/composio/${toolkit}/disconnect?email=${encodeURIComponent(currentUser.email)}`,
+                { method: "POST" }
+            );
+
+            await loadComposioStatus(toolkit);
+
+        } catch(e) {
+
+            console.error(e);
+            alert("Unable to disconnect " + getComposioName(toolkit));
+        }
+    }
+
+    function getComposioName(toolkit) {
+
+        if(toolkit === "gmail"){
+            return "Gmail";
+        }
+
+        if(toolkit === "googlecalendar"){
+            return "Google Calendar";
+        }
+
+        return "Composio";
+    }
+
+    loadUser();
+
+</script>
+
+</body>
+</html>
