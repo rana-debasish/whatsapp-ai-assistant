@@ -42,7 +42,7 @@ A Spring Boot application that turns WhatsApp into a personal AI assistant. Conn
 | Layer | Technology |
 |---|---|
 | Language | Java 17 |
-| Framework | Spring Boot 3.3.x |
+| Framework | Spring Boot 4.0.6 |
 | Web | Spring MVC |
 | Persistence | Spring Data JPA, PostgreSQL (Supabase) |
 | Templating | Thymeleaf |
